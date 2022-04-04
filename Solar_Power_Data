@@ -1,0 +1,159 @@
+This project
+
+The complete code is provided below:
+
+import numpy as np
+import requests as rq
+import pandas as pd
+from bs4 import BeautifulSoup as bs
+
+# Get the URL using requests.
+url = 'https://cmsc320.github.io/files/top-50-solar-flares.html'
+r = rq.get(url)
+
+# Extract and parse the data from the page.
+sp = bs(r.text, 'html.parser')
+sp.prettify()
+table = sp.find('table')
+
+# Make a data frame from the extracted table.
+df = pd.concat(pd.read_html(str(table)))
+df.columns = ['rank', 'x_classification', 'date', 'region', 'start_time', 'maximum_time', 'end_time', 'movie']
+df
+
+###########################################################################################################################
+
+# Drop the last column of the table.
+df = df.drop(columns = ['movie'])
+
+# Combine the date and each of the three time columns into three datetime columns.
+df['start_time'] = pd.to_datetime(df['date'] + ' ' + df['start_time'])
+df['maximum_time'] = pd.to_datetime(df['date'] + ' ' + df['maximum_time'])
+df['end_time'] = pd.to_datetime(df['date'] + ' ' + df['end_time'])
+
+# Fix the dataframe format accordingly.
+df = df.drop(columns = ['date'])
+df = df.reindex(columns=['rank', 'x_classification', 'start_time', 'maximum_time', 'end_time', 'region'])
+df
+
+###########################################################################################################################
+
+import re
+
+# Scrape the data from another html file.
+url = 'https://cmsc320.github.io/files/waves_type2.html'
+r = rq.get(url)
+sp = bs(r.text, 'html.parser')
+text = sp.find('pre')
+
+# Make each line of the text into long strings.
+text = sp.get_text()
+lines = text.split('\n')
+
+# Cut off any unnecessary strings from the text.
+start_index = 0
+index = 0
+for line in lines:
+    if re.match("\d{4,}/\d{2,}/\d{2,}", line):
+        start_index = index
+        break
+    index += 1
+
+# Make a new array with only the necessary lines.
+data_elements = []
+for i in range(start_index, len(lines)-3):
+    data_elements.append(lines[i])
+
+# Make a dataframe.
+df = pd.DataFrame(columns=['start_date', 'start_time', 'end_date', 'end_time', 'start_frequency', 'end_frequency',
+      'flare_location', 'flare_region'])
+
+# Insert new rows into the dataframe with the scraped data.
+for row in data_elements:
+    cols = row.split()
+    new_row = pd.DataFrame({'start_date': [cols[0]], 'start_time': [cols[1]], 'end_date': [cols[2]],
+                            'end_time': [cols[3]], 'start_frequency': [cols[4]], 'end_frequency': [cols[5]],
+                            'flare_location': [cols[6]], 'flare_region': [cols[7]]})
+    df = pd.concat([df, new_row], ignore_index=True)
+df
+
+###########################################################################################################################
+
+# Make a new dataframe.
+df2 = pd.DataFrame(columns=['year', 'start_date', 'start_time', 'end_date', 'end_time', 'start_frequency', 'end_frequency',
+      'flare_location', 'flare_region', 'importance', 'cme_date', 'cme_time', 'cpa', 'width', 'speed', 'plot',
+        'is_halo', 'width_lower_bound'])
+
+# Insert new rows into the dataframe with the scraped data.
+for row in data_elements:
+    cols = row.split()
+    year = cols[0].split('/')
+    
+    # Note: in order to convert date and time into datetime, the range of time must be in 0...23:59.
+    # Thus, we are manually setting the time value from 24:00 to 23:59.
+    if cols[3] == '24:00':
+        cols[3] = '23:59'
+    if cols[11] == 'Halo':
+        is_halo = True
+    else:
+        is_halo = False
+    if '>' in cols[12]:
+        lower_bound = True
+    else:
+        lower_bound = False
+    if cols[9] == '--/--':
+        year[0] = '----'
+    new_row = pd.DataFrame({'year': [year[0]], 'start_date': [year[1]+'/'+year[2]], 'start_time': [cols[1]],
+                            'end_date': [cols[2]], 'end_time': [cols[3]], 'start_frequency': [cols[4]],
+                            'end_frequency': [cols[5]], 'flare_location': [cols[6]], 'flare_region': [cols[7]],
+                            'importance': [cols[8]], 'cme_date': [cols[9]], 'cme_time': [cols[10]], 'cpa': [cols[11]],
+                            'width': [cols[12]], 'speed': [cols[13]], 'plot': [cols[14]], 'is_halo': [is_halo],
+                            'width_lower_bound': [lower_bound]})
+    df2 = pd.concat([df2, new_row], ignore_index=True)
+
+# Fix the dataframe format accordingly.
+df2['start_datetime'] = pd.to_datetime(df2['year'] + '/' + df2['start_date'] + ' ' + df2['start_time'], errors='ignore')
+df2['end_datetime'] = pd.to_datetime(df2['year'] + '/' + df2['end_date'] + ' ' + df2['end_time'], errors='ignore')
+df2['cme_datetime'] = pd.to_datetime(df2['year'] + '/' + df2['cme_date'] + ' ' + df2['cme_time'], errors='ignore')
+
+# Finally, we need to adjust the columns as a final dataframe; we leave only the necessary columns.
+df2 = df2.reindex(columns=['start_datetime', 'end_datetime', 'start_frequency', 'end_frequency',
+      'flare_location', 'flare_region', 'importance', 'cme_datetime', 'cpa', 'width', 'speed', 'plot',
+        'is_halo', 'width_lower_bound'])
+df2
+
+###########################################################################################################################
+
+# This replicated data contains the same number of columns from the NASA table; it provides the top 50 solar flares.
+extract = df2['importance']
+index = []
+count = 0
+for x in extract:
+    result = re.match('^X...$', x)
+    if result:
+        index.append(count)
+    count += 1
+rep_data = pd.DataFrame(columns=['start_datetime', 'end_datetime', 'start_frequency', 'end_frequency',
+      'flare_location', 'flare_region', 'importance', 'cme_datetime', 'cpa', 'width', 'speed', 'plot',
+        'is_halo', 'width_lower_bound'])
+
+rep_data = pd.concat([rep_data, df2.iloc[index]])
+
+rep_data = rep_data.sort_values('importance', ascending = False)
+rep_data
+
+###########################################################################################################################
+
+# Get the URL using requests.
+url = 'https://www.spaceweatherlive.com/en/solar-activity/top-50-solar-flares.html#SWL_Page'
+r = rq.get(url)
+
+# Extract and parse the data from the page.
+sp = bs(r.text, 'html.parser')
+sp.prettify()
+table = sp.find('table')
+
+# Make a data frame from the extracted table.
+df = pd.concat(pd.read_html(str(table)))
+df.columns = ['rank', 'x_classification', 'date', 'region', 'start_time', 'maximum_time', 'end_time', 'movie']
+df

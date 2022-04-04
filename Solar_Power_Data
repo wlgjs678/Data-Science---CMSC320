@@ -1,4 +1,5 @@
-This project
+This project is intended for scraping the space weather data from a HTML page and use the extracted data to make a suitable data table that I particularly want.
+The code is written in Python.
 
 The complete code is provided below:
 
